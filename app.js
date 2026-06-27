@@ -14,9 +14,7 @@ const ANALYSIS_SCHEMA = {
   type: Type.OBJECT,
   properties: {
     ticket_id: { type: Type.STRING },
-    relevant_transaction_id: {
-      anyOf: [{ type: Type.STRING }, { type: Type.NULL }],
-    },
+    relevant_transaction_id: { type: Type.STRING, nullable: true },
     evidence_verdict: {
       type: Type.STRING,
       enum: ["consistent", "inconsistent", "insufficient_data"],
@@ -137,6 +135,7 @@ app.post("/analyze-ticket", async (req, res) => {
     return res.status(200).json(parsed);
   } catch (error) {
     const message = error && error.message ? error.message : "Unknown error";
+    const status = error && typeof error.status === "number" ? error.status : 0;
 
     if (
       message.includes("API key") ||
@@ -144,6 +143,17 @@ app.post("/analyze-ticket", async (req, res) => {
       message.includes("badRequest")
     ) {
       return res.status(400).json({ error: "Bad request to Gemini API." });
+    }
+
+    if (
+      status === 429 ||
+      message.includes("RESOURCE_EXHAUSTED") ||
+      message.toLowerCase().includes("prepayment credits are depleted")
+    ) {
+      return res.status(500).json({
+        error:
+          "Gemini API quota exhausted. Please top up billing/credits and retry.",
+      });
     }
 
     return res.status(500).json({ error: "Failed to analyze ticket." });
